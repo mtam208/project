@@ -2,32 +2,28 @@ const axios = require('axios')
 const cheerio = require('cheerio')
 const fs = require('fs')
 const path = require('path')
-const { stringify } = require('querystring')
-
-const filePath = './output'
 
 const site = 'https://xe.chotot.com'
 const filter = 'https://xe.chotot.com/mua-ban-oto?fbclid=IwAR18Yz8_sywuORwgHKYx6QxHEt0F91W8DcyErQLAN0LwCkcsy_uLtGdAcj8'
 
+
 const getCarList = async () => {
 	try {
-		const { data } = await axios.get(filter);
-		const $ = cheerio.load(data);
-		const carList = [];
-
-		$('div.ctAdlisting > ul > li > a').each((_idx, el) => {
-            const postLink = $(el).attr('href')
-            getCarDetails(postLink)
-            .then(data=>{ 
-                console.log(data);
-                carList.push(data)
-            })
-            .catch(err=> { throw err })
-        });
+        const carList = []
+        for (let page=1; page <= 10; page++){
+            const { data } = await axios.get(`${filter}&page${page}`);
+            const $ = cheerio.load(data);
+            let list = $('div.ctAdlisting > ul > li > a')
+            for (let i=0; i< list.length; i++){
+                const item = list.get(i)
+                const postLink = $(item).attr('href')
+                const carDetails = await getCarDetails(postLink)
+                carList.push(carDetails)
+            }
+        }
         return carList
-	} catch (error) {
-		throw error;
-	}
+    }  
+    catch (error) { throw error; }
 };
 
 const getCarDetails = async (postLink) => {
@@ -42,7 +38,7 @@ const getCarDetails = async (postLink) => {
         modelItem = $("*[itemprop='model']").get(0)
         model = $(modelItem).text().trim()
 
-        title = brand + ' ' + model
+        name = brand + ' ' + model
 
         priceItem = $("*[itemprop='price']").get(0)
         price = parseInt($(priceItem).text().trim().split(/[ .]/).splice(0,3).join(''))
@@ -80,7 +76,7 @@ const getCarDetails = async (postLink) => {
         area = $('span.fz13').text().trim()
 
         carDetails = {
-            title: title,
+            name: name,
             price: price,
             brand: brand,
             model: model,
@@ -99,7 +95,19 @@ const getCarDetails = async (postLink) => {
         throw error
     }
 }
-// getCarList().then(data=>{
-//     console.log(data);
-// })
+
 getCarList()
+.then(data => { 
+    fileName = path.join(__dirname, './output/xechotot_scraping')
+    try {
+        if (fs.existsSync(fileName)) { 
+            fs.unlinkSync(fileName)
+            console.log('Deleted old file'); }
+        fs.writeFileSync(fileName, JSON.stringify(data, null,' '))
+        console.log('Sucessfully export car list');
+    } 
+    catch (err) { throw err}
+})
+.catch(err => { throw err })
+
+
